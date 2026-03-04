@@ -5,8 +5,10 @@ using UnityEngine;
 
 namespace SplenSoft.Unity
 {
-    [Serializable]
-    public class SimpleBaseUrlProvider : IBaseUrlProvider
+    [CreateAssetMenu(
+        fileName = "SimpleBaseUrlProvider", 
+        menuName = "Scriptable Objects/SplenSoft/Web Api Service/Simple Base Url Provider")]
+    public class SimpleBaseUrlProvider : ScriptableObject, IBaseUrlProvider
     {
         [field: SerializeField]
         private string Url { get; set; }
