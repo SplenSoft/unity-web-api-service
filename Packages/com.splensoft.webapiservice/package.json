@@ -1,0 +1,17 @@
+{
+    "name": "com.splensoft.webapiservice",
+    "version": "1.0.0",
+    "displayName": "Unity Web API Service",
+    "description": "A convenient async/await wrapper that makes external REST API requests. Works around common issues with Unity's built-in providers and leverages the power of R3 and UniTask",
+    "unity": "6000.0",
+    "dependencies": {
+      "com.cysharp.unitask": "2.5.10",
+      "com.cysharp.r3": "1.3.0",
+      "com.splensoft.monobehaviourr3": "1.1.2"
+   },
+    "author": {
+      "name": "SplenSoft",
+      "email": "support@splensoft.com",
+      "url": "https://www.splensoft.com"
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "name": "com.splensoft.webapiservice",
+    "rootNamespace": "SplenSoft.Unity",
+    "references": [
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:f699dc67aac2a9d4ba287eb0a420664c"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
