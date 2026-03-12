@@ -37,6 +37,11 @@ namespace SplenSoft.Unity
 
         public async void EnqueuePostRequest(string endpoint, object postBody)
         {
+            if (!Service.NameIsValid)
+            {
+                throw new Exception($"WebApiService Name '{Service.Name}' of object {Service.name} is invalid. Please remove any of the following characters: {new string(Path.GetInvalidFileNameChars())} and ensure the name is not empty or whitespace");
+            }
+
             var guid = Guid.NewGuid().ToString();
             var ticks = DateTime.UtcNow.Ticks;
             string path = Path.Combine(FolderPath, $"{ticks}_{guid}");

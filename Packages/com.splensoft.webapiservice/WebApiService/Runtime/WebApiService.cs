@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
 using UnityEngine;
@@ -27,6 +28,29 @@ namespace SplenSoft.Unity
 
         [field: SerializeField]
         private bool SimulateNoInternet { get; set; }
+
+        public bool NameIsValid => !string.IsNullOrWhiteSpace(Name) && IsValidFileNameRegex(Name);
+
+        protected override void Awake()
+        {
+            base.Awake();
+
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                throw new Exception("WebApiService Name cannot be null or whitespace.");
+            }
+
+            if (!IsValidFileNameRegex(Name))
+            {
+                throw new Exception($"WebApiService Name '{Name}' contains invalid characters. Please remove any of the following characters: {new string(Path.GetInvalidFileNameChars())}");
+            }
+        }
+
+        public static bool IsValidFileNameRegex(string fileName)
+        {
+            string pattern = @"[" + Regex.Escape(new string(Path.GetInvalidFileNameChars())) + "]";
+            return !Regex.IsMatch(fileName, pattern);
+        }
 
         /// <summary>
         /// Expects a fully-qualified URL path, no partial paths, handles retries 
