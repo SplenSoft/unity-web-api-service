@@ -52,6 +52,11 @@ namespace SplenSoft.Unity
                 Body = postBody
             };
 
+            if (!Directory.Exists(FolderPath))
+            {
+                Directory.CreateDirectory(FolderPath);
+            }
+
             await File.WriteAllTextAsync(path, JsonUtility.ToJson(postRequest), _cancellationDestroy.Token);
             Log($"Enqueued post request to {endpoint} at {path}", LogLevel.Verbose);
             TryProcessQueue();
@@ -68,6 +73,11 @@ namespace SplenSoft.Unity
 
             try
             {
+                if (!Directory.Exists(FolderPath))
+                {
+                    Directory.CreateDirectory(FolderPath);
+                }
+
                 // Get all files in folder
                 Log($"Checking for queued requests in {FolderPath}", LogLevel.Verbose);
                 var files = Directory.GetFiles(FolderPath);
