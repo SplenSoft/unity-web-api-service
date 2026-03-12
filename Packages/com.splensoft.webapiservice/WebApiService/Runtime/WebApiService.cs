@@ -1,6 +1,5 @@
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
-using SplenSoft.Unity;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,10 +12,21 @@ using UnityEngine.Networking;
 
 namespace SplenSoft.Unity
 {
-    public class WebApiService : MonoProtectedSingletonR3<WebApiService>
+    public class WebApiService : MonoBehaviourR3
     {
+        private static int _waitTime = 2000;
+
+        [field: SerializeField, Tooltip("Must be unique")]
+        public string Name { get; private set; }
+
         [field: SerializeField]
         private InterfaceReference<IBaseUrlProvider> BaseUrlProvider { get; set; }
+
+        [field: SerializeField]
+        private SerializedNetworkQueue NetworkQueue { get; set; }
+
+        [field: SerializeField]
+        private bool SimulateNoInternet { get; set; }
 
         /// <summary>
         /// Expects a fully-qualified URL path, no partial paths, handles retries 
@@ -26,7 +36,7 @@ namespace SplenSoft.Unity
         /// <param name="builder"></param>
         /// <param name="queryParameters"></param>
         /// <returns></returns>
-        public static async UniTask<UnityWebRequest> StandaloneGetRequest(
+        public async UniTask<UnityWebRequest> StandaloneGetRequest(
             UriBuilder builder, (string, string)[] queryParameters)
         {
             if (queryParameters.Length > 0)
@@ -64,19 +74,18 @@ namespace SplenSoft.Unity
             return request;
         }
 
-        public static async Task<UnityWebRequest> GetRequest(string endPoint,
+        public async Task<UnityWebRequest> GetRequest(string endPoint,
             params (string, string)[] queryParameters)
         {
             UriBuilder builder = await GetUri(endPoint);
             return await StandaloneGetRequest(builder, queryParameters);
         }
 
-        private static async Task<UriBuilder> GetUri(string endPoint)
+        private async Task<UriBuilder> GetUri(string endPoint)
         {
-            var instance = await GetInstanceAsync();
-            Uri uri = new Uri(await instance.BaseUrlProvider.Value.GetBaseUrlAsync());
+            Uri uri = new Uri(await BaseUrlProvider.Value.GetBaseUrlAsync());
             uri = new Uri(uri, endPoint);
-            instance.Log($"Api request: {uri}", LogLevel.Verbose);
+            Log($"Api request: {uri}", LogLevel.Verbose);
             return new UriBuilder(uri);
         }
 
@@ -110,9 +119,7 @@ namespace SplenSoft.Unity
             }
         }
 
-        private static int _waitTime = 2000;
-
-        public static async Task<UnityWebRequest> ApiPost(string endPoint, object postBody)
+        public async Task<UnityWebRequest> ApiPost(string endPoint, object postBody)
         {
             UriBuilder builder = await GetUri(endPoint);
             string stringUri = builder.ToString();
@@ -156,12 +163,11 @@ namespace SplenSoft.Unity
             return request;
         }
 
-        private static async void LogRequest(UnityWebRequest request)
+        private async void LogRequest(UnityWebRequest request)
         {
-            var instance = await GetInstanceAsync();
             if (request != null && request.downloadHandler != null)
             {
-                instance.Log($"Roberto API request to {request.uri}, status code {request.responseCode} returned: {request.downloadHandler.text}", LogLevel.Verbose);
+                Log($"Roberto API request to {request.uri}, status code {request.responseCode} returned: {request.downloadHandler.text}", LogLevel.Verbose);
             }
         }
 
@@ -172,88 +178,5 @@ namespace SplenSoft.Unity
                 await UniTask.Yield(Application.exitCancellationToken);
             }
         }
-
-        //private static WWWForm GetFormFromArray((string, object)[] formFields)
-        //{
-        //    var form = formFields.Length > 0 ? new WWWForm() : null;
-        //    if (form != null)
-        //    {
-        //        var logString = "Preparing WWWForm with fields: ";
-
-        //        Array.ForEach(formFields, formField =>
-        //        {
-        //            var value = formField.Item2 != null ? formField.Item2.ToString() : "null";
-        //            logString += formField.Item1 + ": " + value + ", ";
-        //            form.AddField(formField.Item1, value);
-        //        });
-
-        //        Log(logString, LogLevel.Verbose);
-        //    }
-        //    return form;
-        //}
-
-        //private static WWWForm GetFormFromDictionary(Dictionary<string, string> formFields)
-        //{
-        //    if (formFields == null) return null;
-
-        //    var form = formFields.Keys.Count > 0 ? new WWWForm() : null;
-        //    if (form != null)
-        //    {
-        //        var logString = "Preparing WWWForm with fields: ";
-
-        //        formFields.Keys.ToList().ForEach(key =>
-        //        {
-        //            var value = formFields[key] != null ? formFields[key].ToString() : "null";
-        //            logString += key + ": " + formFields[key] + ", ";
-        //            form.AddField(key, formFields[key]);
-        //        });
-
-        //        Log(logString, LogLevel.Verbose);
-        //    }
-        //    return form;
-        //}
-
-        //private static Dictionary<string, Sprite> _cachedSpritesFromWebURLs = new Dictionary<string, Sprite>();
-
-        ///// <summary>
-        ///// Expects a fully-qualified URL path, no partial paths, caches sprites already downloaded from the same path
-        ///// </summary>
-        //internal static async Task<Sprite> GetSpriteFromWebImage(string path)
-        //{
-        //    path = path.Replace("\"", "");
-
-        //    if (_cachedSpritesFromWebURLs.ContainsKey(path))
-        //    {
-        //        return _cachedSpritesFromWebURLs[path];
-        //    }
-
-        //    Log($"Downloading texture from path {path}", LogLevel.Verbose);
-        //    UnityWebRequest request = UnityWebRequestTexture.GetTexture(path);
-        //    request.SendWebRequest();
-
-        //    while (!request.isDone)
-        //    {
-        //        await Task.Yield();
-        //        if (!Application.isPlaying)
-        //        {
-        //            throw new System.Exception("Application quit unexpectedly while downloading a texture");
-        //        }
-        //    }
-
-        //    if (request.isHttpError)
-        //    {
-        //        return null;
-        //    }
-
-        //    request.disposeUploadHandlerOnDispose = true;
-        //    request.disposeDownloadHandlerOnDispose = true;
-
-        //    Log($"Successfully downloaded texture from path {path}", LogLevel.Verbose);
-
-        //    Texture2D texture = DownloadHandlerTexture.GetContent(request);
-        //    var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0, 0));
-        //    _cachedSpritesFromWebURLs[path] = sprite;
-        //    return sprite;
-        //}
     }
 }
