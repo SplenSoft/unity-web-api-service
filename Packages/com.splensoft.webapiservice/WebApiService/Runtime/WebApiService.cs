@@ -24,7 +24,7 @@ namespace SplenSoft.Unity
         private InterfaceReference<IBaseUrlProvider> BaseUrlProvider { get; set; }
 
         [field: SerializeField]
-        private SerializedNetworkQueue NetworkQueue { get; set; }
+        public SerializedNetworkQueue NetworkQueue { get; private set; }
 
         [field: SerializeField]
         private bool SimulateNoInternet { get; set; }

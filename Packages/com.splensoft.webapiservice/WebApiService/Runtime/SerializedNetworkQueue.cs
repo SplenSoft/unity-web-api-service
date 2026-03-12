@@ -6,7 +6,7 @@ using UnityEngine;
 namespace SplenSoft.Unity
 {
     [Serializable]
-    internal class SerializedNetworkQueue : MonoBehaviourR3
+    public class SerializedNetworkQueue : MonoBehaviourR3
     {
         private static UnityEventR3<Exception> _onException = new();
         public static IDisposable OnException(Action<Exception> x) => _onException.Subscribe(x);
