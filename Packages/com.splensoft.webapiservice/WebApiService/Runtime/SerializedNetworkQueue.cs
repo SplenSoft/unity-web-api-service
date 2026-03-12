@@ -2,6 +2,7 @@ using R3;
 using System;
 using System.IO;
 using UnityEngine;
+using Newtonsoft.Json;
 
 namespace SplenSoft.Unity
 {
@@ -57,7 +58,10 @@ namespace SplenSoft.Unity
                 Directory.CreateDirectory(FolderPath);
             }
 
-            await File.WriteAllTextAsync(path, JsonUtility.ToJson(postRequest), _cancellationDestroy.Token);
+            string json = JsonConvert.SerializeObject(postRequest);
+            //Debug.Log($"Enqueuing post request to {endpoint} with body: {json} at path: {path}");
+
+            await File.WriteAllTextAsync(path, json, _cancellationDestroy.Token);
             Log($"Enqueued post request to {endpoint} at {path}", LogLevel.Verbose);
             TryProcessQueue();
         }
@@ -106,7 +110,7 @@ namespace SplenSoft.Unity
                 // Deserialize the file into SerializedPostRequest
                 Log($"Deserializing queued request: {oldestFile}", LogLevel.Verbose);
                 var json = File.ReadAllText(oldestFile);
-                var postRequest = JsonUtility.FromJson<SerializedPostRequest>(json);
+                var postRequest = JsonConvert.DeserializeObject<SerializedPostRequest>(json);
 
                 // Send the request
                 Log($"Sending queued request to {postRequest.Endpoint}", LogLevel.Verbose);
