@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Web;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -53,6 +52,20 @@ namespace SplenSoft.Unity
         }
 
         /// <summary>
+        /// Creates a simulated network error response with status code 0
+        /// </summary>
+        private UnityWebRequest CreateSimulatedNetworkErrorResponse(string url)
+        {
+            Log($"Simulating no internet connection for request to {url}", LogLevel.Verbose);
+            var request = new UnityWebRequest(url, "GET")
+            {
+                downloadHandler = new DownloadHandlerBuffer()
+            };
+            // UnityWebRequest with responseCode 0 simulates a network error
+            return request;
+        }
+
+        /// <summary>
         /// Expects a fully-qualified URL path, no partial paths, handles retries 
         /// with exponential backoff in case of failed requests with response 
         /// code 0 which indicates a network error
@@ -74,6 +87,12 @@ namespace SplenSoft.Unity
             }
 
             string stringUri = builder.ToString();
+
+            if (SimulateNoInternet)
+            {
+                return CreateSimulatedNetworkErrorResponse(stringUri);
+            }
+
             var request = UnityWebRequest.Get(stringUri);
             var operation = request.SendWebRequest();
 
@@ -84,28 +103,28 @@ namespace SplenSoft.Unity
 
             LogRequest(request);
 
-            if (request.responseCode == 0)
-            {
-                await UniTask.Delay(_waitTime);
-                _waitTime *= 2;
-                return await StandaloneGetRequest(builder, queryParameters);
-            }
-            else
-            {
-                _waitTime = 2000;
-            }
+            //if (request.responseCode == 0)
+            //{
+            //    await UniTask.Delay(_waitTime);
+            //    _waitTime *= 2;
+            //    return await StandaloneGetRequest(builder, queryParameters);
+            //}
+            //else
+            //{
+            //    _waitTime = 2000;
+            //}
 
             return request;
         }
 
-        public async Task<UnityWebRequest> GetRequest(string endPoint,
+        public async UniTask<UnityWebRequest> GetRequest(string endPoint,
             params (string, string)[] queryParameters)
         {
             UriBuilder builder = await GetUri(endPoint);
             return await StandaloneGetRequest(builder, queryParameters);
         }
 
-        private async Task<UriBuilder> GetUri(string endPoint)
+        private async UniTask<UriBuilder> GetUri(string endPoint)
         {
             Uri uri = new Uri(await BaseUrlProvider.Value.GetBaseUrlAsync());
             uri = new Uri(uri, endPoint);
@@ -143,10 +162,16 @@ namespace SplenSoft.Unity
             }
         }
 
-        public async Task<UnityWebRequest> ApiPost(string endPoint, object postBody)
+        public async UniTask<UnityWebRequest> ApiPost(string endPoint, object postBody)
         {
             UriBuilder builder = await GetUri(endPoint);
             string stringUri = builder.ToString();
+
+            if (SimulateNoInternet)
+            {
+                return CreateSimulatedNetworkErrorResponse(stringUri);
+            }
+
             using var textWriter = new StringWriter();
             var serializer = new JsonSerializer();
             serializer.Serialize(textWriter, postBody);
@@ -174,16 +199,16 @@ namespace SplenSoft.Unity
             await WaitForOperation(operation);
             LogRequest(request);
 
-            if (request.responseCode == 0)
-            {
-                await Task.Delay(_waitTime);
-                _waitTime *= 2;
-                return await ApiPost(endPoint, postBody);
-            }
-            else
-            {
-                _waitTime = 2000;
-            }
+            //if (request.responseCode == 0)
+            //{
+            //    await Task.Delay(_waitTime);
+            //    _waitTime *= 2;
+            //    return await ApiPost(endPoint, postBody);
+            //}
+            //else
+            //{
+            //    _waitTime = 2000;
+            //}
             return request;
         }
 
