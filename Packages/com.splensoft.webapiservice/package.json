@@ -1,6 +1,6 @@
 {
     "name": "com.splensoft.webapiservice",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "displayName": "Unity Web API Service",
     "description": "A convenient async/await wrapper that makes external REST API requests. Works around common issues with Unity's built-in providers and leverages the power of R3 and UniTask",
     "unity": "6000.0",

@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using UnityEditor;
@@ -84,3 +85,4 @@ internal class RequireInterfaceDrawer : PropertyDrawer {
         return type;
     }
 }
+#endif

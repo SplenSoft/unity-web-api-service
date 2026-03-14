@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -112,3 +113,4 @@ internal struct InterfaceArgs {
         InterfaceType = interfaceType;
     }
 }
+#endif
