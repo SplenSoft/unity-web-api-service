@@ -30,6 +30,10 @@ namespace SplenSoft.Unity
 
         public bool NameIsValid => !string.IsNullOrWhiteSpace(Name) && IsValidFileNameRegex(Name);
 
+        [field: SerializeField]
+        private List<string> ActiveRequests { get; set; } = new();
+
+
         protected override void Awake()
         {
             base.Awake();
@@ -43,6 +47,8 @@ namespace SplenSoft.Unity
             {
                 throw new Exception($"WebApiService Name '{Name}' contains invalid characters. Please remove any of the following characters: {new string(Path.GetInvalidFileNameChars())}");
             }
+
+            ActiveRequests.Clear();
         }
 
         public static bool IsValidFileNameRegex(string fileName)
@@ -120,8 +126,16 @@ namespace SplenSoft.Unity
         public async UniTask<UnityWebRequest> GetRequest(string endPoint,
             params (string, string)[] queryParameters)
         {
-            UriBuilder builder = await GetUri(endPoint);
-            return await StandaloneGetRequest(builder, queryParameters);
+            ActiveRequests.Add(endPoint);
+            try
+            {
+                UriBuilder builder = await GetUri(endPoint);
+                return await StandaloneGetRequest(builder, queryParameters);
+            }
+            finally
+            {
+                ActiveRequests.Remove(endPoint);
+            }
         }
 
         private async UniTask<UriBuilder> GetUri(string endPoint)
@@ -164,52 +178,60 @@ namespace SplenSoft.Unity
 
         public async UniTask<UnityWebRequest> ApiPost(string endPoint, object postBody)
         {
-            UriBuilder builder = await GetUri(endPoint);
-            string stringUri = builder.ToString();
-
-            if (SimulateNoInternet)
+            ActiveRequests.Add(endPoint);
+            try
             {
-                return CreateSimulatedNetworkErrorResponse(stringUri);
-            }
+                UriBuilder builder = await GetUri(endPoint);
+                string stringUri = builder.ToString();
 
-            using var textWriter = new StringWriter();
-            var serializer = new JsonSerializer();
-            serializer.Serialize(textWriter, postBody);
-            string postData = textWriter.ToString();
-
-            var request = new UnityWebRequest(stringUri, "POST")
-            {
-                downloadHandler = new DownloadHandlerBuffer()
-            };
-
-            if (!string.IsNullOrEmpty(postData))
-            {
-                byte[] array = Encoding.UTF8.GetBytes(postData);
-                request.uploadHandler = new UploadHandlerRaw(array)
+                if (SimulateNoInternet)
                 {
-                    contentType = "application/json"
+                    return CreateSimulatedNetworkErrorResponse(stringUri);
+                }
+
+                using var textWriter = new StringWriter();
+                var serializer = new JsonSerializer();
+                serializer.Serialize(textWriter, postBody);
+                string postData = textWriter.ToString();
+
+                var request = new UnityWebRequest(stringUri, "POST")
+                {
+                    downloadHandler = new DownloadHandlerBuffer()
                 };
+
+                if (!string.IsNullOrEmpty(postData))
+                {
+                    byte[] array = Encoding.UTF8.GetBytes(postData);
+                    request.uploadHandler = new UploadHandlerRaw(array)
+                    {
+                        contentType = "application/json"
+                    };
+                }
+
+                request.disposeUploadHandlerOnDispose = true;
+                request.disposeDownloadHandlerOnDispose = true;
+
+                request.SetRequestHeader("Content-Type", "application/json");
+                var operation = request.SendWebRequest();
+                await WaitForOperation(operation);
+                LogRequest(request);
+
+                //if (request.responseCode == 0)
+                //{
+                //    await Task.Delay(_waitTime);
+                //    _waitTime *= 2;
+                //    return await ApiPost(endPoint, postBody);
+                //}
+                //else
+                //{
+                //    _waitTime = 2000;
+                //}
+                return request;
             }
-
-            request.disposeUploadHandlerOnDispose = true;
-            request.disposeDownloadHandlerOnDispose = true;
-
-            request.SetRequestHeader("Content-Type", "application/json");
-            var operation = request.SendWebRequest();
-            await WaitForOperation(operation);
-            LogRequest(request);
-
-            //if (request.responseCode == 0)
-            //{
-            //    await Task.Delay(_waitTime);
-            //    _waitTime *= 2;
-            //    return await ApiPost(endPoint, postBody);
-            //}
-            //else
-            //{
-            //    _waitTime = 2000;
-            //}
-            return request;
+            finally
+            {
+                ActiveRequests.Remove(endPoint);
+            }
         }
 
         private async void LogRequest(UnityWebRequest request)
