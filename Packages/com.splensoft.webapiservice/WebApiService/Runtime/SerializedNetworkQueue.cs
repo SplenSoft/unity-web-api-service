@@ -4,6 +4,8 @@ using System.IO;
 using UnityEngine;
 using Newtonsoft.Json;
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine.Networking;
 
 namespace SplenSoft.Unity
 {
@@ -48,7 +50,7 @@ namespace SplenSoft.Unity
             var ticks = DateTime.UtcNow.Ticks;
             string path = Path.Combine(FolderPath, $"{ticks}_{guid}");
 
-            var postRequest = new SerializedPostRequest
+            var postRequest = new SerializedRequest
             {
                 Endpoint = endpoint,
                 Body = postBody
@@ -64,6 +66,38 @@ namespace SplenSoft.Unity
 
             await File.WriteAllTextAsync(path, json, _cancellationDestroy.Token);
             Log($"Enqueued post request to {endpoint} at {path}", LogLevel.Verbose);
+            TryProcessQueue();
+        }
+
+        public async void EnqueueGetRequest(string endpoint, params (string, string)[] queryParameters)
+        {
+            if (!Service.NameIsValid)
+            {
+                throw new Exception($"WebApiService Name '{Service.Name}' of object {Service.name} is invalid. Please remove any of the following characters: {new string(Path.GetInvalidFileNameChars())} and ensure the name is not empty or whitespace");
+            }
+
+            var guid = Guid.NewGuid().ToString();
+            var ticks = DateTime.UtcNow.Ticks;
+            string path = Path.Combine(FolderPath, $"{ticks}_{guid}");
+
+            var getRequest = new SerializedRequest
+            {
+                Endpoint = endpoint
+            };
+
+            foreach (var (key, value) in queryParameters)
+            {
+                getRequest.QueryParameters.Add(new KeyValuePair<string, string>(key, value));
+            }
+
+            if (!Directory.Exists(FolderPath))
+            {
+                Directory.CreateDirectory(FolderPath);
+            }
+            string json = JsonConvert.SerializeObject(getRequest);
+            //Debug.Log($"Enqueuing get request to {endpoint} with query parameters: {json} at path: {path}");
+            await File.WriteAllTextAsync(path, json, _cancellationDestroy.Token);
+            Log($"Enqueued get request to {endpoint} at {path}", LogLevel.Verbose);
             TryProcessQueue();
         }
 
@@ -110,33 +144,59 @@ namespace SplenSoft.Unity
 
                 // Deserialize the file into SerializedPostRequest
                 Log($"Deserializing queued request: {oldestFile}", LogLevel.Verbose);
-                var json = File.ReadAllText(oldestFile);
-                var postRequest = JsonConvert.DeserializeObject<SerializedPostRequest>(json);
+                var json = await File.ReadAllTextAsync(oldestFile, _cancellationDestroy.Token);
+
+                // We can determine if it's a GET or POST request based on the presence of the "Body" property
+
+                var request = JsonConvert.DeserializeObject<SerializedRequest>(json);
 
                 // Send the request
-                Log($"Sending queued request to {postRequest.Endpoint}", LogLevel.Verbose);
-                var response = await Service.ApiPost(postRequest.Endpoint, postRequest.Body);
+                Log($"Sending queued request to {request.Endpoint}", LogLevel.Verbose);
 
-                bool isSuccess = response.responseCode >= 200 && response.responseCode < 300;
-                bool canNeverWork = response.responseCode >= 300 && response.responseCode < 500;
+                UnityWebRequest response;
 
-                // If successful
-                if (isSuccess)
+                if (request.Body != null)
                 {
-                    File.Delete(oldestFile);
-                    Log($"Successfully processed queued request: {oldestFile}", LogLevel.Verbose);
+                    response = await Service.PostRequest(request.Endpoint, request.Body);
                 }
-                else if (canNeverWork)
+                else
                 {
-                    // If it can never work, delete the file to prevent retrying
-                    File.Delete(oldestFile);
-
-                    Debug.LogError(
-                        $"Request to {postRequest.Endpoint} failed with response code {response.responseCode}. The request will be discarded.");
+                    var queryParamsArray = request.QueryParameters
+                        .Select(kvp => (kvp.Key, kvp.Value))
+                        .ToArray();
+                    
+                    response = await Service.GetRequest(
+                        request.Endpoint, 
+                        queryParamsArray);
                 }
 
-                // Every other response code (like 0 for network error) will be retried on the next attempt
-                Log($"Finished processing queued request: {oldestFile}. Success: {isSuccess}, CanNeverWork: {canNeverWork}", LogLevel.Verbose);
+                try
+                {
+                    bool isSuccess = response.responseCode >= 200 && response.responseCode < 300;
+                    bool canNeverWork = response.responseCode >= 300 && response.responseCode < 500;
+
+                    // If successful
+                    if (isSuccess)
+                    {
+                        File.Delete(oldestFile);
+                        Log($"Successfully processed queued request: {oldestFile}", LogLevel.Verbose);
+                    }
+                    else if (canNeverWork)
+                    {
+                        // If it can never work, delete the file to prevent retrying
+                        File.Delete(oldestFile);
+
+                        Debug.LogError(
+                            $"Request to {request.Endpoint} failed with response code {response.responseCode}. The request will be discarded.");
+                    }
+
+                    // Every other response code (like 0 for network error) will be retried on the next attempt
+                    Log($"Finished processing queued request: {oldestFile}. Success: {isSuccess}, CanNeverWork: {canNeverWork}", LogLevel.Verbose);
+                }
+                finally
+                {
+                    response.Dispose();
+                }
             }
             catch (Exception ex)
             {
@@ -152,9 +212,10 @@ namespace SplenSoft.Unity
     }
 
     [Serializable]
-    internal class SerializedPostRequest
+    internal class SerializedRequest
     {
         public string Endpoint { get; set; }
         public object Body { get; set; }
+        public List<KeyValuePair<string, string>> QueryParameters { get; set; } = new();
     }
 }

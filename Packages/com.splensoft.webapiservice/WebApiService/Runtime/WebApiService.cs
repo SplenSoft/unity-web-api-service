@@ -176,7 +176,7 @@ namespace SplenSoft.Unity
             }
         }
 
-        public async UniTask<UnityWebRequest> ApiPost(string endPoint, object postBody)
+        public async UniTask<UnityWebRequest> PostRequest(string endPoint, object postBody)
         {
             ActiveRequests.Add(endPoint);
             try
@@ -232,6 +232,12 @@ namespace SplenSoft.Unity
             {
                 ActiveRequests.Remove(endPoint);
             }
+        }
+
+        [Obsolete("Use PostRequest instead.")]
+        public async UniTask<UnityWebRequest> ApiPost(string endPoint, object postBody)
+        {
+            return await PostRequest(endPoint, postBody);
         }
 
         private async void LogRequest(UnityWebRequest request)
