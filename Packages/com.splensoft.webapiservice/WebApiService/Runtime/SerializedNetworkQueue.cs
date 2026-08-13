@@ -1,4 +1,3 @@
-using R3;
 using System;
 using System.IO;
 using UnityEngine;
@@ -21,8 +20,11 @@ namespace SplenSoft.Unity
         [field: SerializeField]
         private float QueueProcessIntervalSeconds { get; set; } = 1f;
 
+        [field: SerializeField]
+        public int MaxConcurrentProcessing { get; set; } = 3;
+
         private float _queueProcessTimer;
-        private bool _busy;
+        private HashSet<string> _busyGuids = new HashSet<string>();
 
         private int _queueLength = -1;
         private string _lastError;
@@ -48,6 +50,14 @@ namespace SplenSoft.Unity
         public int GetQueueLength()
         {
             return _queueLength;
+        }
+
+        /// <summary>
+        /// Return the number of requests currently being processed.
+        /// </summary>
+        public int GetProcessingCount()
+        {
+            return _busyGuids.Count;
         }
 
         public string GetLastError()
@@ -117,17 +127,17 @@ namespace SplenSoft.Unity
             TryProcessQueue();
         }
 
-        private async void TryProcessQueue()
+        private void TryProcessQueue()
         {
-            if (_busy)
-            {
-                return;
-            }
-
-            _busy = true;
-
             try
             {
+                // Check if we've hit max concurrent processing limit
+                if (_busyGuids.Count >= MaxConcurrentProcessing)
+                {
+                    Log($"Max concurrent processing limit reached ({MaxConcurrentProcessing}). Waiting for slots to free up.", LogLevel.Verbose);
+                    return;
+                }
+
                 if (!Directory.Exists(FolderPath))
                 {
                     Directory.CreateDirectory(FolderPath);
@@ -143,28 +153,71 @@ namespace SplenSoft.Unity
                     return;
                 }
 
-                // Process the oldest file
-                DateTime oldestDateTime = DateTime.MaxValue;
-                string oldestFile = null;
-                Log("Queued requests found. Processing the oldest one.", LogLevel.Verbose);
+                // Find all unhandled files (not currently being processed)
+                var unhandledFiles = new List<(string path, DateTime creationTime, string guid)>();
+                
                 foreach (var file in files)
                 {
-                    Log($"Found queued request: {file}", LogLevel.Verbose);
-                    var creationTime = File.GetCreationTime(file);
-                    if (creationTime < oldestDateTime)
+                    // Extract GUID from filename (format: {ticks}_{guid})
+                    string fileName = Path.GetFileName(file);
+                    string[] parts = fileName.Split('_');
+                    
+                    if (parts.Length >= 2)
                     {
-                        Log($"Found older queued request: {file}, {creationTime}", LogLevel.Verbose);
-                        oldestDateTime = creationTime;
-                        oldestFile = file;
+                        string guid = parts[1];
+                        
+                        if (!_busyGuids.Contains(guid))
+                        {
+                            var creationTime = File.GetCreationTime(file);
+                            unhandledFiles.Add((file, creationTime, guid));
+                            Log($"Found unhandled queued request: {file}", LogLevel.Verbose);
+                        }
+                        else
+                        {
+                            Log($"Skipping already processing request: {file}", LogLevel.Verbose);
+                        }
                     }
                 }
 
-                // Deserialize the file into SerializedPostRequest
-                Log($"Deserializing queued request: {oldestFile}", LogLevel.Verbose);
-                var json = await File.ReadAllTextAsync(oldestFile, _cancellationDestroy.Token);
+                if (unhandledFiles.Count == 0)
+                {
+                    Log("No unhandled requests found (all are currently being processed).", LogLevel.Verbose);
+                    return;
+                }
+
+                // Sort by creation time and process as many as we can up to the max limit
+                var sortedFiles = unhandledFiles.OrderBy(f => f.creationTime).ToList();
+                int availableSlots = MaxConcurrentProcessing - _busyGuids.Count;
+                int itemsToProcess = Math.Min(availableSlots, sortedFiles.Count);
+
+                Log($"Processing {itemsToProcess} queued requests (Available slots: {availableSlots})", LogLevel.Verbose);
+
+                for (int i = 0; i < itemsToProcess; i++)
+                {
+                    var (path, _, guid) = sortedFiles[i];
+                    ProcessFile(path, guid);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error checking network queue: {ex.Message}");
+                Debug.LogException(ex);
+                _onException?.Invoke(ex);
+            }
+        }
+
+        private async void ProcessFile(string filePath, string guid)
+        {
+            // Mark this GUID as busy
+            _busyGuids.Add(guid);
+
+            try
+            {
+                // Deserialize the file into SerializedRequest
+                Log($"Deserializing queued request: {filePath}", LogLevel.Verbose);
+                var json = await File.ReadAllTextAsync(filePath, _cancellationDestroy.Token);
 
                 // We can determine if it's a GET or POST request based on the presence of the "Body" property
-
                 var request = JsonConvert.DeserializeObject<SerializedRequest>(json);
 
                 // Send the request
@@ -196,13 +249,13 @@ namespace SplenSoft.Unity
                     // If successful
                     if (isSuccess)
                     {
-                        File.Delete(oldestFile);
-                        Log($"Successfully processed queued request: {oldestFile}", LogLevel.Verbose);
+                        File.Delete(filePath);
+                        Log($"Successfully processed queued request: {filePath}", LogLevel.Verbose);
                     }
                     else if (canNeverWork)
                     {
                         // If it can never work, delete the file to prevent retrying
-                        File.Delete(oldestFile);
+                        File.Delete(filePath);
 
                         _lastError = $"Request to {request.Endpoint} failed with response code {response.responseCode}. The request will be discarded.";
 
@@ -218,7 +271,7 @@ namespace SplenSoft.Unity
                     }
 
                     // Every other response code (like 0 for network error) will be retried on the next attempt
-                    Log($"Finished processing queued request: {oldestFile}. Success: {isSuccess}, CanNeverWork: {canNeverWork}", LogLevel.Verbose);
+                    Log($"Finished processing queued request: {filePath}. Success: {isSuccess}, CanNeverWork: {canNeverWork}", LogLevel.Verbose);
                 }
                 finally
                 {
@@ -227,13 +280,14 @@ namespace SplenSoft.Unity
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Error processing network queue: {ex.Message}");
+                Debug.LogError($"Error processing network queue file {filePath}: {ex.Message}");
                 Debug.LogException(ex);
                 _onException?.Invoke(ex);
             }
             finally
             {
-                _busy = false;
+                // Remove this GUID from busy list
+                _busyGuids.Remove(guid);
             }
         }
     }
