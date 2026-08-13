@@ -24,6 +24,9 @@ namespace SplenSoft.Unity
         private float _queueProcessTimer;
         private bool _busy;
 
+        private int _queueLength = -1;
+        private string _lastError;
+
         private string FolderPath => Path.Combine(
             Application.persistentDataPath,
             "WebApiService",
@@ -37,6 +40,19 @@ namespace SplenSoft.Unity
                 _queueProcessTimer = 0f;
                 TryProcessQueue();
             }
+        }
+
+        /// <summary>
+        /// Return the number of requests currently in the queue. Returns -1 if the queue has not been processed yet.
+        /// </summary>
+        public int GetQueueLength()
+        {
+            return _queueLength;
+        }
+
+        public string GetLastError()
+        {
+            return _lastError;
         }
 
         public async void EnqueuePostRequest(string endpoint, object postBody)
@@ -120,6 +136,7 @@ namespace SplenSoft.Unity
                 // Get all files in folder
                 Log($"Checking for queued requests in {FolderPath}", LogLevel.Verbose);
                 var files = Directory.GetFiles(FolderPath);
+                _queueLength = files.Length;
                 if (files.Length == 0)
                 {
                     Log("No queued requests found.", LogLevel.Verbose);
@@ -174,6 +191,7 @@ namespace SplenSoft.Unity
                 {
                     bool isSuccess = response.responseCode >= 200 && response.responseCode < 300;
                     bool canNeverWork = response.responseCode >= 300 && response.responseCode < 500;
+                    bool isServerError = response.responseCode >= 500 && response.responseCode < 600;
 
                     // If successful
                     if (isSuccess)
@@ -186,8 +204,17 @@ namespace SplenSoft.Unity
                         // If it can never work, delete the file to prevent retrying
                         File.Delete(oldestFile);
 
+                        _lastError = $"Request to {request.Endpoint} failed with response code {response.responseCode}. The request will be discarded.";
+
                         Debug.LogError(
                             $"Request to {request.Endpoint} failed with response code {response.responseCode}. The request will be discarded.");
+                    }
+                    else if (isServerError)
+                    {
+                        _lastError = $"Request to {request.Endpoint} failed with response code {response.responseCode}. The request will be retried on the next attempt.";
+
+                        Debug.LogWarning(
+                            $"Request to {request.Endpoint} failed with response code {response.responseCode}. The request will be retried on the next attempt.");
                     }
 
                     // Every other response code (like 0 for network error) will be retried on the next attempt
