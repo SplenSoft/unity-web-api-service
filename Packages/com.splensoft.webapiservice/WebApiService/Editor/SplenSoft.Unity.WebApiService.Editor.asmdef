@@ -1,0 +1,18 @@
+{
+    "name": "com.splensoft.webapiservice.editor",
+    "rootNamespace": "SplenSoft.Unity.Editor",
+    "references": [
+        "com.splensoft.webapiservice"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
