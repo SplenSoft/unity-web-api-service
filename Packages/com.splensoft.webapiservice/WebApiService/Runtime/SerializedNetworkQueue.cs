@@ -28,6 +28,7 @@ namespace SplenSoft.Unity
 
         private int _queueLength = -1;
         private string _lastError;
+        private List<string> _currentlyProcessingEndpoints = new();
 
         private string FolderPath => Path.Combine(
             Application.persistentDataPath,
@@ -50,6 +51,11 @@ namespace SplenSoft.Unity
         public int GetQueueLength()
         {
             return _queueLength;
+        }
+
+        public IReadOnlyList<string> GetCurrentlyProcessingEndpoints()
+        {
+            return _currentlyProcessingEndpoints.AsReadOnly();
         }
 
         /// <summary>
@@ -210,6 +216,8 @@ namespace SplenSoft.Unity
         {
             // Mark this GUID as busy
             _busyGuids.Add(guid);
+            
+            string endpoint = null;
 
             try
             {
@@ -219,6 +227,10 @@ namespace SplenSoft.Unity
 
                 // We can determine if it's a GET or POST request based on the presence of the "Body" property
                 var request = JsonConvert.DeserializeObject<SerializedRequest>(json);
+                endpoint = request.Endpoint;
+                
+                // Add endpoint to currently processing list
+                _currentlyProcessingEndpoints.Add(endpoint);
 
                 // Send the request
                 Log($"Sending queued request to {request.Endpoint}", LogLevel.Verbose);
@@ -286,6 +298,12 @@ namespace SplenSoft.Unity
             }
             finally
             {
+                // Remove endpoint from currently processing list
+                if (endpoint != null)
+                {
+                    _currentlyProcessingEndpoints.Remove(endpoint);
+                }
+                
                 // Remove this GUID from busy list
                 _busyGuids.Remove(guid);
             }
